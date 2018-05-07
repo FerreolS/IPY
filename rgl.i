@@ -3361,14 +3361,13 @@ func _rgl_HessSchat_update(self, x)
 
 func _rgl_HessSchat_state1(self, x)
 {
-  local mask; eq_nocopy, mask, self.mask;
   w = self.mu;
   eps = abs(self.epsilon);
-
-  d = array(double, dimsof(x));
+  dims = dimsof(x);
+  d = array(double,[3,dims(2),dims(3),3] );
   d(:,:,1) = -2.*x:
   d(:,:,2) = x:
-  d(:,:,2) = -2.*x:
+  d(:,:,3) = -2.*x:
     
   ia = 1:0;
   i0 = 1:-2;
