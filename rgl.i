@@ -3340,9 +3340,9 @@ local rgl_HessSchat;
      This regularization has the following hyper-parameters:
 
        1 - "mu" = global regularization weight;
-       2 - "epsilon" = small value to get rid of singularities;
+       2 - "tau" = small value to get rid of singularities;
 
-     Note that by using a small but not negligible EPSILON, edge-preserving
+     Note that by using a small but not negligible TAU, edge-preserving
      smoothness is achieved.
 
 
@@ -3351,7 +3351,7 @@ local rgl_HessSchat;
 
 func _rgl_HessSchat_setup(self)
 {
-  return h_set(self, state=0, epsilon=1e-8);
+  return h_set(self, state=0, tau=1e-8);
 }
 
 func _rgl_HessSchat_update(self, x)
@@ -3361,13 +3361,13 @@ func _rgl_HessSchat_update(self, x)
 
 func _rgl_HessSchat_state1(self, x)
 {
-  w = self.mu;
-  eps = abs(self.epsilon);
+  mu = self.mu;
+  tau = self.tau;
   dims = dimsof(x);
   d = array(double,[3,dims(2),dims(3),3] );
-  d(:,:,1) = -2.*x:
-  d(:,:,2) = x:
-  d(:,:,3) = -2.*x:
+  d(:,:,1) = x;
+  d(:,:,2) = x;
+    d(:,:,3) = x;
     
   ia = 1:0;
   i0 = 1:-2;
@@ -3376,24 +3376,34 @@ func _rgl_HessSchat_state1(self, x)
   
   i3 = 2:0;
   i4 = 1:-1;
+
+    /* y(:,:,1)=x([3:end,1,2],:) -2*x([2:end,1],:) + x;
+                            % xy
+                            y(:,:,2)=x([2:end,1],[2:end,1]) -x([2:end,1],:) - x(:,[2:end,1]) +x;
+                            % yy
+                            y(:,:,3)=x(:,[3:end,1,2]) -2*x(:,[2:end,1]) + x;
+    */
     
-  d(i1,ia,1) += x(i0,ia) + x(i2,ia);
-  d(i3,i3,2) +=   x(i4,i4) - x(i4,i3) - x(i3,i4) ;
-  d(ia,i1,3) += x(ia,i0) + x(ia,i2);
+    //  d(1,1,2) = x(2,2)-  x(2,1) - x(1,2);
+    
+  d(i0,ia,1) += x(i2,ia) - 2*x(i1,ia);
+  d(i4,i4,2) += x(i3,i3) - x(i3,i4) - x(i4,i3)  ;
+  d(ia,i0,3) += x(ia,i2) -2* x(ia,i1);
 
-  d(1,ia,1) += x(0,ia) + x(2,ia);
-  d(0,ia,1) += x(-1,ia) + x(1,ia);
+  d(-1,ia,1) += x(1,ia) -2* x(0,ia);
+  d(0,ia,1)  += x(2,ia) -2* x(1,ia);
 
-  d(ia,1,3) += x(ia,0) + x(ia,2);
-  d(ia,0,3) += x(ia,-1) + x(ia,1);
+  d(ia,-1,3) += x(ia,1) -2* x(ia,0);
+  d(ia,0,3)  += x(ia,2) -2* x(ia,1);
 
   
-  d(1,i3,2) += x(0,i4) - x(0,i3) - x(1,i4) ;
-  d(i3,i3,2) +=   x(i4,0) - x(i4,1) - x(i3,0) ;
+  d(0,i4,2) += x(0,i3) - x(1,i4) - x(1,i3) ;
+  d(i4,0,2) += x(i3,0) - x(i4,1) - x(i3,1) ;
+  d(0,0,2) +=   x(1,1) - x(0,1) - x(1,0) ;
 
   E=svd2D_decomp(V,d);
-  r = sqrt( (E*E)(,,sum)+ 2.0*eps*eps);
-  err = (sum(r) - numberof(r)*eps);
+  r = sqrt( (E*E)(,,sum)+ 2.0*tau*tau);
+  err = mu*(sum(r) - numberof(r)*tau);
   h_set, self, state=1, err=err, r=r, d=d,V=V , E=E;
 
   
@@ -3405,22 +3415,28 @@ func _rgl_HessSchat_state2(self, x)
   if (self.state < 1) _rgl_HessSchat_state1, self, x;
   q = self.E/self.r;
   
+   q=svd2D_recomp(self.V,q);
+
+   //  y=x([end-1,end,1:end-2],:,1)-2*x([end,1:end-1],:,1)   +x(:,[end-1,end,1:end-2],3)-2*x(:,[end,1:end-1],3)  + x([end,1:end-1],[end,1:end-1],2) - x(:,[end,1:end-1],2) - x([end,1:end-1],:,2)  ;
+     
   g = q(,,sum);
+
+  // g(1,1,1) = q(-1,1,1) - 2*q(0,1,1) + q(1,-1,3)-2*q(1,0,3) + q(0,0,2) - q(1,0,2) - q(0,1,2)
   
   g(3:0,:) += q(1:-2,:,1) -2*q(2:-1,:,1); 
   g(2,:) += q(0,:,1) -2*q(1,:,1);
   g(1,:) += q(-1,:,1) -2*q(0,:,1);
-
-  g(,3:0) += q(,1:-2,1) -2*q(,2:-1,1); 
-  g(,2) += q(,0,1) -2*q(,1,1);
-  g(,1) += q(,-1,1) -2*q(,0,1);
-
+  
+  g(,3:0) += q(,1:-2,3) -2*q(,2:-1,3); 
+  g(,2) += q(,0,3) -2*q(,1,3);
+  g(,1) += q(,-1,3) -2*q(,0,3);
+  
   g(2:0,2:0) += q(1:-1,1:-1,2) - q(2:0,1:-1,2) - q(1:-1,2:0,2);
- g(1,2:0) += q(0,1:-1,2) - q(1,1:-1,2) - q(0,2:0,2);
- g(2:0,1) += q(1:-1,0,2) - q(2:0,0,2) - q(1:-1,1,2);
-
-
-  h_set, self, state=2, grd=g;
+  g(1,2:0) += q(0,1:-1,2) - q(1,1:-1,2) - q(0,2:0,2);
+  g(2:0,1) += q(1:-1,0,2) - q(2:0,0,2) - q(1:-1,1,2);
+  g(1,1) += q(0,0,2) - q(1,0,2) - q(0,1,2); 
+  
+  h_set, self, state=2, grd=self.mu*g;
 }
 
 func _rgl_HessSchat_get_penalty(self, x)
@@ -3444,7 +3460,7 @@ func _rgl_HessSchat_get_diagonal_of_hessian(self, x) {}
 func _rgl_HessSchat_get_attr(self, index)
 {
   if (index == 1) return self.mu;
-  if (index == 2) return self.epsilon;
+  if (index == 2) return self.tau;
 }
 
 func _rgl_HessSchat_set_attr(self, index, value)
@@ -3459,13 +3475,13 @@ func _rgl_HessSchat_set_attr(self, index, value)
   }
   if (index == 2) {
     if (rgl_real_scalar(value) || value <= 0.0) {
-      error, "\"epsilon\" must be a strictly non-negative real";
+      error, "\"tau\" must be a strictly non-negative real";
     }
-    if (value != self.epsilon) {
-      h_set, self, epsilon = double(value), state = 0;
+    if (value != self.tau) {
+      h_set, self, tau = double(value), state = 0;
     }
   }
 }
 
 /* After having defined all class methods, define the class itself: */
-_rgl_class, "HessSchat", ["mu", "epsilon"];
+_rgl_class, "HessSchat", ["mu", "tau"];

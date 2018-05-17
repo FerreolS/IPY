@@ -2,11 +2,11 @@
 srcdir=.
 
 # these values filled in by "yorick -batch make.i" or configure script
-Y_MAKEDIR=
-Y_EXE=
+Y_MAKEDIR=/opt/yorick/
+Y_EXE=/usr/local/bin/yorick
 Y_EXE_PKGS=
-Y_EXE_HOME=
-Y_EXE_SITE=
+Y_EXE_HOME=/opt/yorick/
+Y_EXE_SITE=/opt/yorick/
 Y_HOME_PKG=
 
 # ----------------------------------------------------- optimization flags

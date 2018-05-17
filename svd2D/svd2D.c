@@ -85,7 +85,7 @@ Y_svd2D_decomp(int argc)
   int rtype;
   int fresh;
 
-	
+  long v_index = -1L;	
 
   double n;
   double tmp[3];
@@ -94,6 +94,8 @@ Y_svd2D_decomp(int argc)
   double trace;
   double delta;
         
+  Yv = NULL;
+  Ye = NULL;
   
   if (argc != 2) y_error("expecting exactly two argument");
  
@@ -111,60 +113,46 @@ Y_svd2D_decomp(int argc)
   dimsout[1] =  dims[1];
   dimsout[2] =  dims[2];
   dimsout[3] =  2;
-
   
-  Yv = NULL;
-  Ye = NULL;
-  if (argc == 2) {
-    /* Get current value of destination. */
-    if (yarg_typeid(1) == Y_DOUBLE) {
-      Yv = ygeta_any(1, NULL, tdims, &rtype);
-      if (!(rtype == Y_DOUBLE && same_dims(tdims, dims))) {
-        Yv = NULL;
-      }
-    }
-    if (Yv == NULL) {
-      /* Discard destination value because it cannot be reused. */
-      ypush_nil();
-      yarg_swap(argc, 0);
-      yarg_drop(1);
-    }
+  
+  
+  v_index =  yget_ref(1);
+  if (v_index < 0L) {
+    y_error("expecting simple variable reference for V");
   }
+  Yv = ypush_d(dimsout);
+  yput_global(v_index, 0);
   
-  /* Create the destination if needed. */
-  fresh = (Yv == NULL);
-  if (fresh) {
-      Yv = ypush_d(dimsout);
-      Ye = ypush_d(dimsout);
+  Ye = ypush_d(dimsout);
+  
+  
+  
+#pragma omp parallel for shared(x,Ye,Yv) private(i, k, trace, delta, n, tmp, E, U)
+  for(i=0; i < num_of_mat; i++){
+    for (k=0;k<3;k++)   // get the matrix value [X(1,1) X(2,1)=X(1,2), X(2,2)]
+      tmp[k]=x[i+num_of_mat*k];
     
-  }
-
-   #pragma omp parallel for shared(x,Ye,Yv) private(i, k, trace, delta, n, tmp, E, U)
-    for(i=0; i < num_of_mat; i++){
-    	for (k=0;k<3;k++)   // get the matrix value [X(1,1) X(2,1)=X(1,2), X(2,2)]
-        	tmp[k]=x[i+num_of_mat*k];
-        	
-        if (fabs(tmp[1]) < 1e-15){
-    		E[0]=tmp[0];
-    		E[1]=tmp[2];
-    		U[0]=1.0;
-    		U[1]=0.0;
-    	}
-    	else{
-    		trace=tmp[0]+tmp[2];
-    		delta=(tmp[0]-tmp[2])*(tmp[0]-tmp[2])+4*tmp[1]*tmp[1];
-    		E[0]=0.5*(trace+sqrt(delta));
-    		E[1]=0.5*(trace-sqrt(delta));
-    		n=sqrt((E[0]-tmp[0])*(E[0]-tmp[0])+tmp[1]*tmp[1]);
-    		U[0]=tmp[1]/n;
-    		U[1]=(E[0]-tmp[0])/n;
-  		}
-  		
-  		for (k=0;k<2;k++){  // set result
-        	Ye[i+num_of_mat*k]=E[k];
-  			Yv[i+num_of_mat*k]=U[k];
-  		}
+    if (fabs(tmp[1]) < 1e-15){
+      E[0]=tmp[0];
+      E[1]=tmp[2];
+      U[0]=1.0;
+      U[1]=0.0;
     }
+    else{
+      trace=tmp[0]+tmp[2];
+      delta=(tmp[0]-tmp[2])*(tmp[0]-tmp[2])+4*tmp[1]*tmp[1];
+      E[0]=0.5*(trace+sqrt(delta));
+      E[1]=0.5*(trace-sqrt(delta));
+      n=sqrt((E[0]-tmp[0])*(E[0]-tmp[0])+tmp[1]*tmp[1]);
+      U[0]=tmp[1]/n;
+      U[1]=(E[0]-tmp[0])/n;
+    }
+    
+    for (k=0;k<2;k++){  // set result
+      Ye[i+num_of_mat*k]=E[k];
+      Yv[i+num_of_mat*k]=U[k];
+    }
+  }
 }
 
 
